@@ -99,7 +99,7 @@ still take a complete JSON:API document. Empty response bodies decode to `null`;
 throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfaces.
 
 Customer, ConsumerAddress, PaymentMethod, PaymentDemand, PaymentSubscription,
-RefundDemand, and Merchant endpoint classes are available below.
+RefundDemand, Merchant, and Event endpoint classes are available below.
 Internally, `ApiClient::requestResponse()` returns
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
 resource decoding without storing mutable last-response state on the client.
@@ -467,6 +467,42 @@ The exposed collection relationships are `customers`, `payment_demands`, `paymen
 throughout resource results. Included beneficial owners and corporate officials use generic
 `Edge\Resource` objects; missing included records remain linkage. Relationship access never
 fetches data. No create, update, delete, or confirm operations are exposed.
+
+## Events
+
+`Edge\Event` supports only `list` and `show`, returning `Edge\ResourceResult`.
+
+```php
+$client = new Edge\ApiClient('ept_sandbox_s_test');
+$page = Edge\Event::list($client, [
+    'sort' => ['-created_at'],
+    'fields' => ['events' => ['slug', 'resource_type', 'resource_id', 'created_at']],
+]);
+$events = $page->data; // Array of Edge\Event objects.
+
+$result = Edge\Event::show($client, 'example-event', ['include' => ['merchant']]);
+$event = $result->data;
+$slug = $event->slug;
+$payload = $event->data; // Opaque decoded JSON, not an SDK resource.
+$createdAt = $event->created_at; // DateTimeImmutable, null, or Edge\Unavailable.
+$merchant = $event->getRelated('merchant'); // Edge\Merchant when included; otherwise linkage.
+$refreshed = Edge\Event::show($client, $event); // Also accepts a matching resource.
+```
+
+Readable attributes are `data`, `mode`, `resource_id`, `resource_type`, `slug`, and
+`created_at`; the only exposed relationship is `merchant`. Unfamiliar slugs, modes,
+resource types, and unknown fields are preserved. `data` retains nested JSON objects,
+arrays, scalars, and nulls without decoding embedded resource shapes, timestamps, or
+money pairs. Only the event's `created_at` is mapped to `DateTimeImmutable`; Event has
+no `updated_at` or money mapping. Explicit null stays null, invalid creation dates
+become `Unavailable::DECODING_FAILURE`, and sparse omissions use `Unavailable::UNFETCHED`.
+
+Included events decode as `Edge\Event`. Attributes are read-only, and relationship
+resolution stays local. Event exposes no write operations or webhook processing.
+
+The backend checkout currently has a known event-list defect: its index action queries
+customers. The SDK uses the declared `GET /v2/events` route; this backend defect is recorded
+in the [resource contract](docs/resource-contract.md).
 
 ## Shared operation conventions
 
