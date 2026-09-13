@@ -100,13 +100,68 @@ throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfac
 
 Concrete endpoint classes are planned separately. Internally, `ApiClient::requestResponse()` returns
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
-future resource decoding without storing mutable last-response state on the client.
+resource decoding without storing mutable last-response state on the client.
+
+## Resource results and local relationships
+
+`ResourceDecoder::decode($response, $query = [])` converts an `Edge\Response` into a
+read-only `Edge\ResourceResult`. Existing static and instance client methods retain their
+plain-document return values. Until endpoint classes are added, decode explicitly:
+
+```php
+$decoder = new Edge\ResourceDecoder();
+$decoder->register('payment_demands', Edge\Resource::class, [
+    'dates' => ['created_at', 'updated_at', 'succeeded_at'],
+    'money' => [
+        'amount' => ['amount_cents', 'amount_currency'],
+        'fee' => ['fee_cents', 'amount_currency'],
+    ],
+], ['description', 'buyer']);
+
+$query = ['include' => 'buyer'];
+$response = $client->requestResponse('GET', 'payment_demands/example-demand', ['query' => $query]);
+$result = $decoder->decode($response, $query);
+$demand = $result->data;
+$buyer = $demand->getRelated('buyer'); // Included Resource, or unresolved Linkage.
+$originalIdentifier = $demand->buyer->data; // Original linkage, including metadata.
+```
+
+Result properties are `data` (resource, null, or resource array), `included` (resource array),
+`links`, `meta`, `status` (HTTP status), `headers` (header names mapped to value arrays),
+`raw` (the complete decoded document), and `query` (the supplied query context). Empty
+successful bodies produce null data/raw and an empty included array; `data: []` stays an
+empty collection. Absent links/meta are `Unavailable::UNDEFINED`; explicit nulls and empty
+objects remain intact. Unknown document members remain in `raw`. Malformed JSON or invalid
+resource identities throw `Edge\Exception`. Pagination links are retained without fetching.
+
+The registry is local to each decoder. `register($type, $class, $schema = [], $fields = [])`
+accepts a `Resource` subclass inheriting its constructor contract, explicit value mappings,
+and known wire attribute/relationship names. Unregistered types use generic `Resource`
+without guessed value conversions. Concrete resource registrations will arrive with the
+endpoint classes. Pass the original query to preserve sparse-field context: `fields[type]`
+accepts a comma-separated string or array. Registered fields and schema source fields omitted
+from that selection are unfetched; selected-but-missing and unknown fields are undefined.
+Returned values always take precedence over sparse omissions.
+
+`getRelated($name)` is shared by all resources and performs only local lookup. It returns a
+resolved resource, unresolved `Linkage`, a to-many array of either, explicit null, or
+`Unavailable`. Empty relationships remain `[]`; links-only relationships are unfetched.
+Missing relationships follow the same sparse/undefined rules as attributes. Standalone
+resources have no index and return their original linkage. Attribute/relationship name
+collisions can be handled through `getRelated()` and `getRelationships()`.
+
+Primary and included records use one per-result type/ID index, so repeated identities and
+cyclic relationships refer to the same objects. The first primary occurrence wins over later
+primary or included duplicates; otherwise the first included occurrence wins. Records are
+not merged, and every original occurrence remains in `raw`. Separate results have separate
+identities. Relationship envelopes retain raw linkage, links, metadata, and extensions even
+when `getRelated()` resolves their targets. Access never sends HTTP requests.
 
 ## Resource and value primitives
 
 `Edge\Resource` represents a single JSON:API resource locally. These primitives are available
-now; endpoint classes, document/result decoding, and included-resource resolution follow in
-later parts. Existing client methods still return plain decoded documents.
+now, along with document decoding and local included-resource resolution. Endpoint classes
+follow in later parts. Existing client methods still return plain decoded documents.
 
 ```php
 $resource = new Edge\Resource([

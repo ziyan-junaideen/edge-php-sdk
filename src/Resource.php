@@ -3,6 +3,7 @@
 namespace Edge;
 
 use Edge\Internal\ReadOnlyValue;
+use Edge\Internal\ResourceIndex;
 
 /** Generic resource foundation. Construction and property access never perform HTTP. */
 class Resource extends ReadOnlyValue
@@ -11,18 +12,20 @@ class Resource extends ReadOnlyValue
     private $attributes;
     private $relationships = [];
     private $unfetched;
+    private $index;
 
     /**
      * @param array|\stdClass $resource One JSON:API resource object, not a document
      * @param array $schema dates: field names; money: property => [cents field, currency field]
      * @param string[] $unfetched Fields known to have been excluded by sparse selection
      */
-    public function __construct($resource, array $schema = [], array $unfetched = [])
+    public function __construct($resource, array $schema = [], array $unfetched = [], ?ResourceIndex $index = null)
     {
         $members = self::members($resource);
         $this->raw = self::snapshot($resource);
         $this->attributes = self::snapshot(self::members($members['attributes'] ?? []));
         $this->unfetched = $unfetched;
+        $this->index = $index;
         foreach ($schema['dates'] ?? [] as $field) {
             if (array_key_exists($field, $this->attributes)) {
                 $this->attributes[$field] = ValueDecoder::timestamp($this->attributes[$field]);
@@ -67,6 +70,20 @@ class Resource extends ReadOnlyValue
     public function getAttributes()
     {
         return self::snapshot($this->attributes);
+    }
+
+    /**
+     * Resolve a relationship locally to Resource, Linkage, an array, null, or Unavailable.
+     * The original envelope and identifier metadata remain available in getRelationships().
+     */
+    public function getRelated($name)
+    {
+        if (!array_key_exists($name, $this->relationships)) {
+            return $this->missing($name);
+        }
+        $data = $this->relationships[$name]->data;
+
+        return $this->index === null ? $data : $this->index->resolve($data);
     }
 
     public function getRelationships()
