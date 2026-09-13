@@ -9,10 +9,16 @@ final class ResourceDecoder
 {
     private $types = [];
 
+    public function __construct()
+    {
+        $this->register(Customer::TYPE, Customer::class, Customer::SCHEMA, Customer::FIELDS);
+    }
+
     /**
      * Classes must inherit Resource's constructor contract. Fields lists known wire
      * attributes AND relationships, used to identify sparse omissions, not to filter data.
-     * No type or value mappings are inferred; unregistered types use Resource.
+     * Built-in types are registered by default; explicit registrations override them
+     * for this decoder only. Unregistered types use Resource without inferred mappings.
      */
     public function register($type, $class = Resource::class, array $schema = [], array $fields = [])
     {

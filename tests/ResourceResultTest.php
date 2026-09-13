@@ -2,6 +2,7 @@
 
 namespace Edge\Tests;
 
+use Edge\Customer;
 use Edge\Exception;
 use Edge\Linkage;
 use Edge\Money;
@@ -90,7 +91,7 @@ class ResourceResultTest extends TestCase
         $this->assertSame('first', $demand->description);
         $this->assertSame('second', $result->raw->data[1]->attributes->description);
         $this->assertSame($result->included[0], $demand->getRelated('buyer'));
-        $this->assertSame(Resource::class, get_class($demand->getRelated('buyer')));
+        $this->assertSame(Customer::class, get_class($demand->getRelated('buyer')));
         for ($i = 0; $i < 100; $i++) {
             $demand = $demand->getRelated('buyer')->getRelated('demands')[0];
             $this->assertSame($result->data[0], $demand);

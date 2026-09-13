@@ -98,7 +98,7 @@ and return the same decoded JSON:API documents as their static counterparts belo
 still take a complete JSON:API document. Empty response bodies decode to `null`; failures
 throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfaces.
 
-Concrete endpoint classes are planned separately. Internally, `ApiClient::requestResponse()` returns
+The Customer endpoint class is available below. Internally, `ApiClient::requestResponse()` returns
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
 resource decoding without storing mutable last-response state on the client.
 
@@ -107,38 +107,50 @@ resource decoding without storing mutable last-response state on the client.
 `Edge\ApiResource` connects the instance client and resource decoder. Endpoint subclasses
 opt into `Edge\Operations\ListOperation`, `ShowOperation`, `CreateOperation`,
 `UpdateOperation`, and `ConfirmOperation` individually. Unsupported methods are absent.
-Concrete Edge resource families will be added separately; the following custom class
-illustrates the foundation using the backend's customer collection:
+
+## Customers
+
+`Edge\Customer` supports `list`, `show`, `create`, and `update`. It has no confirm or
+delete operation. Each call returns an `Edge\ResourceResult`.
 
 ```php
-class ExampleCustomer extends Edge\ApiResource
-{
-    use Edge\Operations\ListOperation;
-    use Edge\Operations\ShowOperation;
-    use Edge\Operations\CreateOperation;
-    use Edge\Operations\UpdateOperation;
+$client = new Edge\ApiClient('ept_sandbox_s_test'); // Replace with your secret key.
 
-    const TYPE = 'customers';
-    const SCHEMA = ['dates' => ['created_at', 'updated_at', 'blocked_at']];
-    const FIELDS = ['name', 'email', 'phone_number', 'description'];
-}
-
-$result = ExampleCustomer::create($client, [
+$result = Edge\Customer::create($client, [
     'attributes' => ['name' => 'Ada', 'email' => 'ada@example.com'],
     'relationships' => [],
     'query' => ['fields' => ['customers' => ['name', 'email']]],
 ]);
-$customer = $result->data; // ExampleCustomer
-$updated = ExampleCustomer::update($client, $customer, [
+$customer = $result->data; // Edge\Customer
+$updated = Edge\Customer::update($client, $customer, [
     'attributes' => ['description' => 'Updated description'],
 ]);
-$page = ExampleCustomer::list($client, [
+$page = Edge\Customer::list($client, [
     'include' => ['addresses'],
     'sort' => ['-created_at', 'name'],
     'page' => ['size' => 25],
 ]);
-$shown = ExampleCustomer::show($client, $customer->id);
+$shown = Edge\Customer::show($client, $customer->id, ['include' => ['addresses']]);
+$createdAt = $shown->data->created_at; // DateTimeImmutable when present and valid.
+$addresses = $shown->data->getRelated('addresses'); // Resolve included records locally.
+$status = $shown->status;
+$nextPage = $page->links; // Returned links; fetching another page is explicit.
 ```
+
+Customer fields are `name`, `phone_number`, `email`, `description`, `created_at`,
+`blocked_at`, and `updated_at`. The three timestamps decode to `DateTimeImmutable`;
+null stays null and invalid timestamps become `Unavailable::DECODING_FAILURE`.
+Attributes are read-only; sparse omissions are `Unavailable::UNFETCHED`, and unknown
+fields are preserved. Customer has no money mapping.
+
+Relationships are `merchant`, `addresses`, and `payment_demands`. Included customers
+decode as `Edge\Customer` by default, including in other resource results. Related types
+without an implemented class remain generic resources; missing included records remain
+linkage. The server assigns merchant. Although the backend accepts address linkage on
+create/update, its current customer changesets do not persist it; payment-demand relationship
+writes are not supported. `blocked_at` is readable but is not writable through these operations.
+
+## Shared operation conventions
 
 All operations require an explicit `ApiClient` and return `ResourceResult`. The signatures
 are `list($client, $query = [])`, `show($client, $idOrResource, $query = [])`,
@@ -162,7 +174,7 @@ argument contains query options only; use create/update for billing changes.
 
 Subclasses declare `TYPE` (collection path), `SCHEMA` (explicit date/money mappings), and
 `FIELDS` (known wire fields for sparse omission tracking). Each request uses a fresh decoder
-registered for the called class. Subclasses can override protected `resourceDecoder()` and
+registered for built-in types and the called class. Subclasses can override protected `resourceDecoder()` and
 extend `parent::resourceDecoder()` with additional named included-type registrations.
 Unregistered types remain generic resources. Pagination links and HTTP metadata are retained
 without fetching more pages; errors remain `Edge\Exception` through the shared transport.
@@ -171,7 +183,7 @@ without fetching more pages; errors remain `Edge\Exception` through the shared t
 
 `ResourceDecoder::decode($response, $query = [])` converts an `Edge\Response` into a
 read-only `Edge\ResourceResult`. Existing static and instance client methods retain their
-plain-document return values. Until endpoint classes are added, decode explicitly:
+plain-document return values. For endpoints without a class, decode explicitly:
 
 ```php
 $decoder = new Edge\ResourceDecoder();
@@ -187,7 +199,7 @@ $query = ['include' => 'buyer'];
 $response = $client->requestResponse('GET', 'payment_demands/example-demand', ['query' => $query]);
 $result = $decoder->decode($response, $query);
 $demand = $result->data;
-$buyer = $demand->getRelated('buyer'); // Included Resource, or unresolved Linkage.
+$buyer = $demand->getRelated('buyer'); // Included Customer, or unresolved Linkage.
 $originalIdentifier = $demand->buyer->data; // Original linkage, including metadata.
 ```
 
