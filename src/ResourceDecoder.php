@@ -19,6 +19,7 @@ final class ResourceDecoder
         $this->register(RefundDemand::TYPE, RefundDemand::class, RefundDemand::SCHEMA, RefundDemand::FIELDS);
         $this->register(Merchant::TYPE, Merchant::class, Merchant::SCHEMA, Merchant::FIELDS);
         $this->register(Event::TYPE, Event::class, Event::SCHEMA, Event::FIELDS);
+        $this->register(WebhookSubscription::TYPE, WebhookSubscription::class, WebhookSubscription::SCHEMA, WebhookSubscription::FIELDS);
     }
 
     /**
