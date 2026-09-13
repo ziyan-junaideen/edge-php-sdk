@@ -17,6 +17,7 @@ final class ResourceDecoder
         $this->register(PaymentDemand::TYPE, PaymentDemand::class, PaymentDemand::SCHEMA, PaymentDemand::FIELDS);
         $this->register(PaymentSubscription::TYPE, PaymentSubscription::class, PaymentSubscription::SCHEMA, PaymentSubscription::FIELDS);
         $this->register(RefundDemand::TYPE, RefundDemand::class, RefundDemand::SCHEMA, RefundDemand::FIELDS);
+        $this->register(Merchant::TYPE, Merchant::class, Merchant::SCHEMA, Merchant::FIELDS);
     }
 
     /**
