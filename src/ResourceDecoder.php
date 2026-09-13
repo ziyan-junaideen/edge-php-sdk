@@ -15,6 +15,7 @@ final class ResourceDecoder
         $this->register(ConsumerAddress::TYPE, ConsumerAddress::class, ConsumerAddress::SCHEMA, ConsumerAddress::FIELDS);
         $this->register(PaymentMethod::TYPE, PaymentMethod::class, PaymentMethod::SCHEMA, PaymentMethod::FIELDS);
         $this->register(PaymentDemand::TYPE, PaymentDemand::class, PaymentDemand::SCHEMA, PaymentDemand::FIELDS);
+        $this->register(PaymentSubscription::TYPE, PaymentSubscription::class, PaymentSubscription::SCHEMA, PaymentSubscription::FIELDS);
     }
 
     /**
