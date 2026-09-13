@@ -37,7 +37,8 @@ Edge issues two kinds of key, and only one of them belongs in this SDK.
 The prefix selects live or sandbox by itself — the URL is the same for both, so you switch
 environments by switching keys.
 
-Set the secret key once, before making any requests:
+For the legacy static interface, set the secret key before making requests. Resource
+operations instead take an explicit `ApiClient` with its own key:
 
 ```php
 Edge\Auth::setApiKey('ept_sandbox_s...');
@@ -103,6 +104,75 @@ RefundDemand, Merchant, Event, and WebhookSubscription endpoint classes are avai
 Internally, `ApiClient::requestResponse()` returns
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
 resource decoding without storing mutable last-response state on the client.
+
+## Resource API overview
+
+All resource operations require an explicit `Edge\ApiClient` and return `Edge\ResourceResult`.
+The supported operation sets match the backend contract:
+
+| Resource | list | show | create | update | confirm |
+| --- | --- | --- | --- | --- | --- |
+| Customer | yes | yes | yes | yes | — |
+| ConsumerAddress | yes | yes | yes | yes | — |
+| PaymentMethod | yes | yes | — | — | — |
+| PaymentDemand | yes | yes | yes | yes | yes |
+| PaymentSubscription | yes | yes | yes | yes | yes |
+| RefundDemand | yes | yes | yes | — | — |
+| Merchant | yes | yes | — | — | — |
+| Event | yes | yes | — | — | — |
+| WebhookSubscription | yes | yes | yes | yes | — |
+
+No resource exposes delete. See the individual sections below for accepted attributes and
+relationships. The executable [mocked workflows](tests/ResourceWorkflowTest.php) connect
+customer/address creation, payment-method lookup, payment confirmation and refund, recurring
+subscriptions, and event/webhook configuration. Run them with
+`vendor/bin/phpunit --filter ResourceWorkflowTest`; they make no live API requests and
+simulate the responses after browser verification rather than collecting card details.
+
+## Migrating static calls
+
+Migrate one call at a time; existing static calls can coexist with resource operations:
+
+```php
+// Existing code: configure global auth, build the complete envelope, read raw attributes.
+Edge\Auth::setApiKey('ept_sandbox_s_test');
+$document = Edge\Client::get('payment_demands/example-demand');
+$cents = $document->data->attributes->amount_cents;
+
+// Resource code: pass an isolated client and read mapped properties.
+$client = new Edge\ApiClient('ept_sandbox_s_test');
+$result = Edge\PaymentDemand::show($client, 'example-demand', ['include' => ['buyer']]);
+$demand = $result->data;
+$amount = $demand->amount; // Money when both wire fields are valid.
+$buyer = $demand->getRelated('buyer');
+$status = $result->status;
+$requestHeaders = $result->headers;
+$original = $result->raw;
+```
+
+For writes, move the old `data.attributes` and `data.relationships` into separate
+`attributes` and `relationships` options. Supply relationship identifiers or resources
+without the old `data` wrapper; pass query parameters under `query`. The resource class
+supplies the type and envelope, and update/show accept either an ID or a matching resource.
+Both interfaces continue to throw `Edge\Exception`, including its status, raw body, and
+JSON:API errors. Low-level `ApiClient` calls still return raw documents, so merely replacing
+`Client::get` with `$client->get` does not enable resource decoding.
+
+Pagination is explicit. Request the next page using known page parameters, or decode a
+returned same-origin link while preserving the original sparse-field context:
+
+```php
+$page = Edge\Customer::list($client, ['page' => ['size' => 25]]);
+$next = $page->links instanceof \stdClass ? ($page->links->next ?? null) : null;
+if (is_string($next)) {
+    $response = $client->requestResponse('GET', $next);
+    $page = (new Edge\ResourceDecoder())->decode($response, $page->query);
+}
+```
+
+No page or relationship is fetched automatically. For the example's data access, distinguish
+null and `Edge\Unavailable` from a populated resource or `Money`; the value rules below
+explain sparse omissions and decoding failures.
 
 ## Shared resource operations
 
@@ -612,8 +682,7 @@ resource identities throw `Edge\Exception`. Pagination links are retained withou
 The registry is local to each decoder. `register($type, $class, $schema = [], $fields = [])`
 accepts a `Resource` subclass inheriting its constructor contract, explicit value mappings,
 and known wire attribute/relationship names. Unregistered types use generic `Resource`
-without guessed value conversions. Concrete resource registrations will arrive with the
-endpoint classes. Pass the original query to preserve sparse-field context: `fields[type]`
+without guessed value conversions. All nine endpoint classes are registered by default. Pass the original query to preserve sparse-field context: `fields[type]`
 accepts a comma-separated string or array. Registered fields and schema source fields omitted
 from that selection are unfetched; selected-but-missing and unknown fields are undefined.
 Returned values always take precedence over sparse omissions.
@@ -634,9 +703,8 @@ when `getRelated()` resolves their targets. Access never sends HTTP requests.
 
 ## Resource and value primitives
 
-`Edge\Resource` represents a single JSON:API resource locally. These primitives are available
-now, along with document decoding and local included-resource resolution. Endpoint classes
-follow in later parts. Existing client methods still return plain decoded documents.
+`Edge\Resource` represents a single JSON:API resource locally. Endpoint classes extend this foundation with supported operations
+and backend field mappings. Existing client methods still return plain decoded documents.
 
 ```php
 $resource = new Edge\Resource([
@@ -666,8 +734,7 @@ $resource->unknown->reason;       // Edge\Unavailable::UNDEFINED
 
 `Resource($resource, $schema = [], $unfetched = [])` accepts an associative array or `stdClass`
 for one resource, not a top-level document. Schemas explicitly name date fields and money
-pairs; nothing is inferred from type names or field suffixes. Later endpoint classes will
-supply the [backend-established mappings](docs/resource-contract.md#embedded-attributes-and-money).
+pairs; nothing is inferred from type names or field suffixes. Endpoint operations supply the [backend-established mappings](docs/resource-contract.md#embedded-attributes-and-money).
 Unknown attributes and enum strings remain unchanged. A wire attribute wins if its name
 collides with a derived money property.
 
@@ -875,10 +942,14 @@ $alpha3 = Edge\Helpers::convertAlpha2ToAlpha3('US');
 
 ## Development
 
-The planned resource-oriented API is documented in the
-[backend resource contract](docs/resource-contract.md), including supported operations,
-field mappings, and known backend discrepancies. Concrete endpoint classes are not implemented yet;
-the instance and static clients documented above currently return decoded documents.
+The implemented resource API follows the [backend resource contract](docs/resource-contract.md),
+including supported operations, field mappings, and known backend discrepancies. Resource
+operations return rich results; low-level instance and static clients retain decoded documents.
+
+CI tests PHP 7.3, 8.0, 8.3, and 8.4 using [setup-php](https://github.com/shivammathur/setup-php).
+Each job resolves Composer dependencies on its actual runtime and checks platform requirements.
+The package keeps its `^7.3 || ^8.0` constraint; no lock file or vendor directory is shared
+between runtimes.
 
 The PHP version is pinned in `mise.toml` and managed with [mise](https://mise.jdx.dev):
 
