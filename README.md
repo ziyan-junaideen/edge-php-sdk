@@ -102,6 +102,71 @@ Concrete endpoint classes are planned separately. Internally, `ApiClient::reques
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
 resource decoding without storing mutable last-response state on the client.
 
+## Shared resource operations
+
+`Edge\ApiResource` connects the instance client and resource decoder. Endpoint subclasses
+opt into `Edge\Operations\ListOperation`, `ShowOperation`, `CreateOperation`,
+`UpdateOperation`, and `ConfirmOperation` individually. Unsupported methods are absent.
+Concrete Edge resource families will be added separately; the following custom class
+illustrates the foundation using the backend's customer collection:
+
+```php
+class ExampleCustomer extends Edge\ApiResource
+{
+    use Edge\Operations\ListOperation;
+    use Edge\Operations\ShowOperation;
+    use Edge\Operations\CreateOperation;
+    use Edge\Operations\UpdateOperation;
+
+    const TYPE = 'customers';
+    const SCHEMA = ['dates' => ['created_at', 'updated_at', 'blocked_at']];
+    const FIELDS = ['name', 'email', 'phone_number', 'description'];
+}
+
+$result = ExampleCustomer::create($client, [
+    'attributes' => ['name' => 'Ada', 'email' => 'ada@example.com'],
+    'relationships' => [],
+    'query' => ['fields' => ['customers' => ['name', 'email']]],
+]);
+$customer = $result->data; // ExampleCustomer
+$updated = ExampleCustomer::update($client, $customer, [
+    'attributes' => ['description' => 'Updated description'],
+]);
+$page = ExampleCustomer::list($client, [
+    'include' => ['addresses'],
+    'sort' => ['-created_at', 'name'],
+    'page' => ['size' => 25],
+]);
+$shown = ExampleCustomer::show($client, $customer->id);
+```
+
+All operations require an explicit `ApiClient` and return `ResourceResult`. The signatures
+are `list($client, $query = [])`, `show($client, $idOrResource, $query = [])`,
+`create($client, $options = [])`, `update($client, $idOrResource, $options = [])`, and
+`confirm($client, $idOrResource, $query = [])`. IDs must be nonempty strings or resource
+instances matching the called class and its wire type; mismatches fail before HTTP.
+IDs are escaped as single URL path segments.
+
+Create/update options accept only `attributes`, `relationships`, and `query`. Relationship
+values may be a resource, an `Edge\Linkage`, an explicit `['type' => '...', 'id' => '...']`
+identifier (or equivalent object), an array of identifiers/resources, or null. The encoder
+adds each `data` envelope, preserving to-one null and to-many empty arrays. Empty attribute
+and relationship maps serialize as `{}`; use `(object) []` for nested empty object attributes
+and `[]` for nested lists. Unknown attribute values pass through for server validation.
+
+Include/sort arrays and each `fields[type]` array become comma-separated strings; strings
+are preserved. Nested filters, pagination parameters, and additional query keys are kept.
+Query options never become attributes. `ConfirmOperation`, for endpoints supporting it,
+sends `PATCH /{type}/{id}/confirm` with matching type/ID and `attributes: {}`. Its final
+argument contains query options only; use create/update for billing changes.
+
+Subclasses declare `TYPE` (collection path), `SCHEMA` (explicit date/money mappings), and
+`FIELDS` (known wire fields for sparse omission tracking). Each request uses a fresh decoder
+registered for the called class. Subclasses can override protected `resourceDecoder()` and
+extend `parent::resourceDecoder()` with additional named included-type registrations.
+Unregistered types remain generic resources. Pagination links and HTTP metadata are retained
+without fetching more pages; errors remain `Edge\Exception` through the shared transport.
+
 ## Resource results and local relationships
 
 `ResourceDecoder::decode($response, $query = [])` converts an `Edge\Response` into a
