@@ -229,6 +229,11 @@ $alpha3 = Edge\Helpers::convertAlpha2ToAlpha3('US');
 
 ## Development
 
+The planned resource-oriented API is documented in the
+[backend resource contract](docs/resource-contract.md), including supported operations,
+field mappings, and known backend discrepancies. Resource classes are not implemented yet;
+the static API documented above remains the current interface.
+
 The PHP version is pinned in `mise.toml` and managed with [mise](https://mise.jdx.dev):
 
 ```bash
