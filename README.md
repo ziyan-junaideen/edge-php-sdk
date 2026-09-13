@@ -98,9 +98,86 @@ and return the same decoded JSON:API documents as their static counterparts belo
 still take a complete JSON:API document. Empty response bodies decode to `null`; failures
 throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfaces.
 
-Resource classes are planned separately. Internally, `ApiClient::requestResponse()` returns
+Concrete endpoint classes are planned separately. Internally, `ApiClient::requestResponse()` returns
 an `Edge\Response` for a single request, retaining status, headers, and the raw body for
 future resource decoding without storing mutable last-response state on the client.
+
+## Resource and value primitives
+
+`Edge\Resource` represents a single JSON:API resource locally. These primitives are available
+now; endpoint classes, document/result decoding, and included-resource resolution follow in
+later parts. Existing client methods still return plain decoded documents.
+
+```php
+$resource = new Edge\Resource([
+    'id' => 'example-demand',
+    'type' => 'payment_demands',
+    'attributes' => [
+        'amount_cents' => 4999,
+        'amount_currency' => 'USD',
+        'created_at' => '2024-06-06T21:48:33.382755Z',
+    ],
+    'relationships' => [
+        'buyer' => ['data' => ['type' => 'customers', 'id' => 'example-customer']],
+    ],
+], [
+    'dates' => ['created_at'],
+    'money' => ['amount' => ['amount_cents', 'amount_currency']],
+], ['description']); // Fields known to have been excluded by sparse selection.
+
+$resource->amount->cents;          // 4999 (integer)
+$resource->amount->currency;       // 'USD'
+$resource->amount_cents;           // 4999, original field remains accessible
+$resource->created_at;            // DateTimeImmutable
+$resource->buyer->data;            // Edge\Linkage, no HTTP request
+$resource->description->reason;   // Edge\Unavailable::UNFETCHED
+$resource->unknown->reason;       // Edge\Unavailable::UNDEFINED
+```
+
+`Resource($resource, $schema = [], $unfetched = [])` accepts an associative array or `stdClass`
+for one resource, not a top-level document. Schemas explicitly name date fields and money
+pairs; nothing is inferred from type names or field suffixes. Later endpoint classes will
+supply the [backend-established mappings](docs/resource-contract.md#embedded-attributes-and-money).
+Unknown attributes and enum strings remain unchanged. A wire attribute wins if its name
+collides with a derived money property.
+
+`id`, `type`, attributes, and relationships are read-only properties. Assignment or unset,
+including unknown properties, throws `LogicException`. `getAttributes()` returns the converted
+attribute map; `getRelationships()` returns the relationship map. `getLinks()` and `getMeta()`
+return resource-level values. `getMember($name)` accesses any original top-level member,
+including `attributes`, `relationships`, or extensions, and `getRaw()` returns the original
+resource shape. These accessors preserve empty objects versus arrays. Nested JSON objects
+are copied on input and output so modifying a returned object cannot alter stored values.
+Use the accessors for envelope members whose names also occur as attributes.
+
+`Money($cents, $currency)` requires an actual PHP integer and a nonempty currency string,
+exposed as read-only `cents` and `currency`. Zero, negative values, and unknown currency
+strings are retained exactly; invalid inputs throw `InvalidArgumentException`. There is no
+floating-point conversion or arithmetic. Original money field names and values remain in
+the resource's raw attributes.
+
+`ValueDecoder::timestamp($value)` accepts null or an RFC 3339 timestamp with a timezone and
+up to six fractional digits, returning null or `DateTimeImmutable`. Invalid dates, overflowed
+times, and parser normalization produce an unavailable value. `ValueDecoder::money($attributes,
+$centsField, $currencyField, $absentReason = Unavailable::UNDEFINED)` returns `Money` for a
+complete valid pair, null for two explicit nulls, and a decoding failure for partial or invalid
+pairs. If both fields are absent it uses the supplied absence reason. A resource marks absent
+money as unfetched when either source field is listed in `$unfetched`; partial pairs still fail.
+
+`Unavailable($reason, $raw = null)` exposes read-only `reason` and `raw`. Reasons are
+`UNFETCHED` (known exclusion or relationship without linkage), `UNDEFINED` (missing without
+evidence of exclusion), and `DECODING_FAILURE` (invalid supplied value). Failures retain their
+wire input; incomplete money retains only fields actually present. Explicit JSON null stays
+null. `isset()` is false for both null and unavailable properties, so inspect the property
+value and its reason when the distinction matters.
+
+`Relationship($relationship)` accepts an array or `stdClass` envelope. Its read-only `data`
+is a `Linkage`, array of `Linkage`, null, or `Unavailable`; an empty collection stays `[]`,
+and absent data is unfetched. Malformed linkage produces a decoding failure. Relationship
+`links`, `meta`, and extensions are independent of resource-level values; `getRaw()` preserves
+the original envelope. `Linkage($identifier)` requires string `type` and `id`, exposes those
+and any metadata/extensions as read-only properties, and provides `getRaw()`. Linkage remains
+unresolved in this part; none of these primitives fetches data automatically.
 
 ## Usage
 
@@ -270,7 +347,7 @@ $alpha3 = Edge\Helpers::convertAlpha2ToAlpha3('US');
 
 The planned resource-oriented API is documented in the
 [backend resource contract](docs/resource-contract.md), including supported operations,
-field mappings, and known backend discrepancies. Resource classes are not implemented yet;
+field mappings, and known backend discrepancies. Concrete endpoint classes are not implemented yet;
 the instance and static clients documented above currently return decoded documents.
 
 The PHP version is pinned in `mise.toml` and managed with [mise](https://mise.jdx.dev):
