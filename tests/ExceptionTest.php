@@ -30,11 +30,16 @@ class ExceptionTest extends TestCase
         parent::tearDown();
     }
 
-    private function willRespondWith(array $responses)
+    protected function willRespondWith(array $responses)
     {
         Client::setHttpClient(new GuzzleClient([
             'handler' => HandlerStack::create(new MockHandler($responses)),
         ]));
+    }
+
+    protected function request()
+    {
+        return Client::get('customers');
     }
 
     /**
@@ -45,7 +50,7 @@ class ExceptionTest extends TestCase
         $this->willRespondWith($responses);
 
         try {
-            Client::get('customers');
+            $this->request();
         } catch (Exception $e) {
             return $e;
         }

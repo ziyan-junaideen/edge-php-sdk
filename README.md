@@ -63,6 +63,45 @@ You can also identify your application in the `User-Agent`:
 Edge\Client::setUserAgentSuffix('WooCommerce/9.1.2');
 ```
 
+## Instance clients
+
+`Edge\ApiClient` keeps credentials and configuration on each instance, so applications can
+use multiple accounts or environments without changing the static client:
+
+```php
+$client = new Edge\ApiClient('ept_sandbox_s_test', [
+    'user_agent_suffix' => 'ExampleApp/1.0',
+]);
+
+$customers = $client->get('customers', [
+    'filter' => ['email' => 'ada@example.com'],
+    'page' => ['size' => 25],
+]);
+$customerId = $customers->data[0]->id;
+```
+
+Constructor options:
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `base_uri` | `https://api.tryedge.io/v2/` | A bare host gains `/v2/`; an explicit path is retained. |
+| `verify` | `true` | TLS verification; also accepts a CA bundle path or `false` for local self-signed TLS. |
+| `user_agent_suffix` | `''` | Application identity appended to the SDK User-Agent. |
+| `http_client` | A new Guzzle client | Inject a `GuzzleHttp\Client` for custom middleware or tests. |
+
+Keys and user-agent suffixes are trimmed. Instance clients do not read `Edge\Auth`, static
+`Client` settings, or `EDGE_API_BASE_URI`; pass `base_uri` explicitly for another environment.
+Changing or resetting the static client does not affect existing instances.
+
+The instance methods `get`, `create`, `update`, `patch`, and `confirm` take the same arguments
+and return the same decoded JSON:API documents as their static counterparts below. Writes
+still take a complete JSON:API document. Empty response bodies decode to `null`; failures
+throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfaces.
+
+Resource classes are planned separately. Internally, `ApiClient::requestResponse()` returns
+an `Edge\Response` for a single request, retaining status, headers, and the raw body for
+future resource decoding without storing mutable last-response state on the client.
+
 ## Usage
 
 The `Client` class makes requests to the Edge API. Endpoints are relative to the API root, so
@@ -232,7 +271,7 @@ $alpha3 = Edge\Helpers::convertAlpha2ToAlpha3('US');
 The planned resource-oriented API is documented in the
 [backend resource contract](docs/resource-contract.md), including supported operations,
 field mappings, and known backend discrepancies. Resource classes are not implemented yet;
-the static API documented above remains the current interface.
+the instance and static clients documented above currently return decoded documents.
 
 The PHP version is pinned in `mise.toml` and managed with [mise](https://mise.jdx.dev):
 

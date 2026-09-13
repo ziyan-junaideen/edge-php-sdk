@@ -3,8 +3,6 @@
 namespace Edge;
 
 use GuzzleHttp\Client as GuzzleClient;
-use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Exception\TransferException;
 
 /**
  * Static facade over the Edge JSON:API.
@@ -189,112 +187,19 @@ class Client
 
     private static function request($method, $endpoint, array $options = [])
     {
-        $headers = [
-            'User-Agent' => self::userAgent(),
-            // Read at call time, so changing the key between requests takes effect.
-            'Authorization' => 'Bearer ' . Auth::getApiKey(),
-            'Accept' => self::MEDIA_TYPE,
-        ];
+        // Resolve legacy configuration at request time, including the current key.
+        $client = new ApiClient(Auth::getApiKey(), [
+            'base_uri' => self::getBaseUri(),
+            'verify' => self::$verify,
+            'user_agent_suffix' => self::$userAgentSuffix,
+            'http_client' => self::getClient(),
+        ]);
 
-        if (isset($options['headers'])) {
-            $headers = array_merge($headers, $options['headers']);
-        }
-
-        $options['headers'] = $headers;
-
-        if (!isset($options['verify'])) {
-            $options['verify'] = self::$verify;
-        }
-
-        try {
-            $response = self::getClient()->request($method, self::url($endpoint), $options);
-
-            return (new Response($response))->toObject();
-        } catch (RequestException $e) {
-            throw Exception::fromRequestException($e);
-        } catch (TransferException $e) {
-            // Connection failures and redirect loops are not RequestExceptions in
-            // Guzzle 7, so they need catching separately.
-            throw new Exception($e->getMessage(), 0, $e);
-        }
-    }
-
-    /**
-     * Resolve an endpoint against the base URI.
-     *
-     * Done by hand rather than through Guzzle's base_uri because RFC 3986 resolution
-     * silently drops the version prefix when the endpoint has a leading slash.
-     */
-    private static function url($endpoint)
-    {
-        $endpoint = ltrim(trim($endpoint), '/');
-
-        if (preg_match('#^[a-z][a-z0-9+.\-]*://#i', $endpoint)) {
-            // Absolute URLs are only honoured for the configured API itself. Every
-            // request carries the secret key, so following a URL to any other origin
-            // would hand that key to whoever supplied it.
-            return self::assertSameOrigin($endpoint);
-        }
-
-        return self::getBaseUri() . $endpoint;
-    }
-
-    private static function assertSameOrigin($url)
-    {
-        $target = parse_url($url);
-
-        if ($target === false) {
-            throw new Exception('Could not parse endpoint URL: ' . $url);
-        }
-
-        $base = parse_url(self::getBaseUri());
-        $targetOrigin = self::origin($target);
-        $baseOrigin = self::origin($base);
-
-        if ($targetOrigin !== $baseOrigin) {
-            throw new Exception(sprintf(
-                'Refusing to send Edge credentials to %s. Endpoints must be relative to %s.',
-                $targetOrigin,
-                $baseOrigin
-            ));
-        }
-
-        return $url;
-    }
-
-    private static function origin(array $parts)
-    {
-        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
-        $host = isset($parts['host']) ? strtolower($parts['host']) : '';
-        $port = isset($parts['port']) ? (int) $parts['port'] : self::defaultPort($scheme);
-
-        return $scheme . '://' . $host . ':' . $port;
-    }
-
-    private static function defaultPort($scheme)
-    {
-        return $scheme === 'http' ? 80 : 443;
+        return $client->requestResponse($method, $endpoint, $options)->toObject();
     }
 
     private static function normalizeBaseUri($baseUri)
     {
-        $baseUri = rtrim(trim($baseUri), '/');
-        $parts = parse_url($baseUri);
-
-        if ($parts === false || !isset($parts['scheme'], $parts['host'])) {
-            throw new Exception('Invalid Edge API base URI: ' . $baseUri);
-        }
-
-        $scheme = strtolower($parts['scheme']);
-
-        if ($scheme !== 'http' && $scheme !== 'https') {
-            throw new Exception('Edge API base URI must be http or https: ' . $baseUri);
-        }
-
-        if (!isset($parts['path']) || $parts['path'] === '') {
-            $baseUri .= '/v2';
-        }
-
-        return $baseUri . '/';
+        return ApiClient::normalizeBaseUri($baseUri);
     }
 }
