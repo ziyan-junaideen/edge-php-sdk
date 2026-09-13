@@ -8,7 +8,7 @@ use Edge\Customer;
 use Edge\Exception;
 use Edge\Linkage;
 use Edge\PaymentMethod;
-use Edge\Resource;
+use Edge\PaymentDemand;
 use Edge\ResourceDecoder;
 use Edge\ResourceResult;
 use Edge\Unavailable;
@@ -120,7 +120,7 @@ class PaymentMethodTest extends TestCase
         $this->assertInstanceOf(ConsumerAddress::class, $method->getRelated('address'));
         $this->assertInstanceOf(Linkage::class, $method->getRelated('merchant'));
         $demand = $method->getRelated('payment_demands')[0];
-        $this->assertSame(Resource::class, get_class($demand));
+        $this->assertSame(PaymentDemand::class, get_class($demand));
         $this->assertSame($method, $demand->getRelated('payment_method'));
         $this->assertEquals(json_decode(json_encode($raw)), $method->getRaw());
         $this->assertEquals(json_decode(json_encode($document)), $result->raw);
