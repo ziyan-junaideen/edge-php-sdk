@@ -1,6 +1,6 @@
 # Resource-oriented API contract
 
-This is the implementation reference for [issue #5](https://github.com/ziyan-junaideen/edge-php-sdk/issues/5), established by [part 1, issue #6](https://github.com/ziyan-junaideen/edge-php-sdk/issues/6). The API described below is planned; this document does not add resource classes or change the existing SDK.
+This is the implementation reference for [issue #5](https://github.com/ziyan-junaideen/edge-php-sdk/issues/5), established by [part 1, issue #6](https://github.com/ziyan-junaideen/edge-php-sdk/issues/6). All nine resource classes and the shared client, decoding, and value APIs described below are implemented.
 
 ## Provenance and scope
 
@@ -22,7 +22,7 @@ Use this recorded contract when backend sources are unavailable. When refreshing
 
 ## Agreed PHP interface
 
-Keep namespace `Edge`, package `edge-payment-technologies/edge-php-sdk`, and PHP `^7.3 || ^8.0` compatibility. Planned usage:
+Keep namespace `Edge`, package `edge-payment-technologies/edge-php-sdk`, and PHP `^7.3 || ^8.0` compatibility. Usage:
 
 ```php
 $client = new Edge\ApiClient('ept_sandbox_s_test', [
@@ -291,7 +291,7 @@ An empty collection has `data: []`. Retain the link; do not fetch it automatical
 
 ### Create and update
 
-Planned PHP create call and its JSON body for `POST /v2/payment_demands?include=buyer`:
+PHP create call and its JSON body for `POST /v2/payment_demands?include=buyer`:
 
 ```php
 $result = Edge\PaymentDemand::create($client, [
@@ -368,7 +368,7 @@ Both return a singleton result. Any include/fields options belong in the query. 
 - Subscription `canceled_at` is declared string in the view, but the backend schema stores a timestamp. Its explicit date conversion is recorded above.
 - View narrative mentions unsupported deletes, merchant management, old subscription periods, and simplified event names. The router/controller matrix and structured fields take precedence. Narrative filter examples using `/api` and payment `status` should instead use `/v2` and `processor_state`.
 - Customer address writes, address customer reassignment, and payment-method updates have the controller/changeset gaps recorded in the relationship table. Do not silently promise those mutations or implement workarounds.
-- `EventsController.index` currently queries customers using customer scoping rather than events, while show uses the event lookup. The event list route is declared, but this is a backend defect to resolve separately; do not route the SDK to customers or fabricate event fields.
+- At the recorded backend snapshot, `EventsController.index` queries customers using customer scoping rather than events, while show uses the event lookup. The backend follow-up replaces this with an Event query scoped to the merchant and tests listing, filtering/sorting, includes, merchant isolation, and permissions. Deployment of that separate backend fix is required; do not route the SDK to customers or fabricate event fields.
 
 ### Elixir differences
 
@@ -386,4 +386,4 @@ Both return a singleton result. Any include/fields options belong in the query. 
 
 Elixir's explicit-client calls, resource arguments, and empty-attribute confirmation are useful architectural references. Do not copy its client mutation/result shape, finite known-type dispatch, relationship handling, enum assumptions, or link assignment into the PHP design: PHP requires ResourceResult, unknown-type preservation, distinct null/unavailable values, and local included resolution.
 
-Part 1 changes documentation only. Later parts should use mocked HTTP tests for exact methods, encoded paths, headers, query strings, bodies, response/value decoding, and compatibility; never call the live API. Documentation verification consists of comparing this matrix and field inventory against the sources listed above and running `composer validate --strict`; no artificial runtime tests are needed for this part. Browser SDK work, webhook receivers, money arithmetic, publication, releases, and additional resource families remain outside this project.
+All 15 implementation parts are complete. Maintain mocked HTTP tests for exact methods, encoded paths, headers, query strings, bodies, response/value decoding, and compatibility; never call the live API from the SDK suite. Verify documentation against the sources listed above and run `composer validate --strict`. Browser SDK work, webhook receivers, money arithmetic, publication, releases, and additional resource families remain outside this project.

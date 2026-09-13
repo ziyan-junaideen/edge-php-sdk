@@ -99,6 +99,10 @@ and return the same decoded JSON:API documents as their static counterparts belo
 still take a complete JSON:API document. Empty response bodies decode to `null`; failures
 throw `Edge\Exception`. Same-origin endpoint restrictions apply to both interfaces.
 
+HTTP 4xx/5xx responses throw even when an injected Guzzle client disables `http_errors`
+or omits its error middleware. Status, raw body, and JSON:API errors are preserved;
+`getPrevious()` is null when the HTTP client returned the response without throwing.
+
 Customer, ConsumerAddress, PaymentMethod, PaymentDemand, PaymentSubscription,
 RefundDemand, Merchant, Event, and WebhookSubscription endpoint classes are available below.
 Internally, `ApiClient::requestResponse()` returns
@@ -570,9 +574,10 @@ become `Unavailable::DECODING_FAILURE`, and sparse omissions use `Unavailable::U
 Included events decode as `Edge\Event`. Attributes are read-only, and relationship
 resolution stays local. Event exposes no write operations or webhook processing.
 
-The backend checkout currently has a known event-list defect: its index action queries
-customers. The SDK uses the declared `GET /v2/events` route; this backend defect is recorded
-in the [resource contract](docs/resource-contract.md).
+Backend versions matching the original contract snapshot have an event-list defect: the
+index action queries customers. The backend follow-up changes that query to merchant-scoped
+events and adds endpoint regression tests; deploy that fix before relying on event listing.
+The SDK uses the declared `GET /v2/events` route. See the [resource contract](docs/resource-contract.md).
 
 ## Webhook subscriptions
 

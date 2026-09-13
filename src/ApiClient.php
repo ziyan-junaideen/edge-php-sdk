@@ -164,6 +164,11 @@ class ApiClient
         try {
             $response = $this->client->request($method, $this->url($endpoint), $options);
 
+            // Injected clients may disable http_errors or omit its middleware.
+            if ($response->getStatusCode() >= 400) {
+                throw Exception::fromResponse($response);
+            }
+
             return new Response($response);
         } catch (RequestException $e) {
             throw Exception::fromRequestException($e);

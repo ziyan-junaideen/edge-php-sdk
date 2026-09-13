@@ -3,6 +3,7 @@
 namespace Edge;
 
 use GuzzleHttp\Exception\RequestException;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Raised for every failed Edge API call.
@@ -42,11 +43,17 @@ class Exception extends \Exception
             return new self($e->getMessage(), 0, $e);
         }
 
+        return self::fromResponse($response, $e);
+    }
+
+    /** Build the same error when custom HTTP middleware does not throw. */
+    public static function fromResponse(ResponseInterface $response, ?\Throwable $previous = null)
+    {
         $status = $response->getStatusCode();
         $rawBody = (string) $response->getBody();
         $errors = self::parseErrors($rawBody);
 
-        $exception = new self(self::describe($status, $errors, $rawBody), $status, $e);
+        $exception = new self(self::describe($status, $errors, $rawBody), $status, $previous);
         $exception->rawBody = $rawBody;
         $exception->errors = $errors;
 
