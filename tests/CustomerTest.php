@@ -3,6 +3,7 @@
 namespace Edge\Tests;
 
 use Edge\ApiClient;
+use Edge\ConsumerAddress;
 use Edge\Customer;
 use Edge\Exception;
 use Edge\Linkage;
@@ -137,7 +138,7 @@ class CustomerTest extends TestCase
         $this->assertInstanceOf(Linkage::class, $customer->getRelated('merchant'));
         $this->assertInstanceOf(Linkage::class, $customer->getRelated('payment_demands')[0]);
         $this->assertSame($result->included[0], $customer->getRelated('addresses')[0]);
-        $this->assertSame(Resource::class, get_class($result->included[0]));
+        $this->assertSame(ConsumerAddress::class, get_class($result->included[0]));
         $this->assertEquals(json_decode(json_encode($raw)), $customer->getRaw());
         $this->assertEquals((object) $extra['links'], $result->links);
         $this->assertSame(2, $result->meta->total);

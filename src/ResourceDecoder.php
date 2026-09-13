@@ -12,6 +12,7 @@ final class ResourceDecoder
     public function __construct()
     {
         $this->register(Customer::TYPE, Customer::class, Customer::SCHEMA, Customer::FIELDS);
+        $this->register(ConsumerAddress::TYPE, ConsumerAddress::class, ConsumerAddress::SCHEMA, ConsumerAddress::FIELDS);
     }
 
     /**
