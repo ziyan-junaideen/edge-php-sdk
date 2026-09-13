@@ -2,13 +2,13 @@
 
 namespace Edge;
 
-use GuzzleHttp\Psr7\Response as GuzzleResponse;
+use Psr\Http\Message\ResponseInterface;
 
 class Response
 {
     private $response;
 
-    public function __construct(GuzzleResponse $response)
+    public function __construct(ResponseInterface $response)
     {
         $this->response = $response;
     }
@@ -39,17 +39,5 @@ class Response
     public function toObject()
     {
         return json_decode($this->getBody());
-    }
-
-
-    public function handleResponse()
-    {
-        $statusCode = $this->getStatusCode();
-
-        if ($statusCode >= 400) {
-            throw Exception::fromResponse($this->toArray());
-        }
-
-        return $this;
     }
 }

@@ -1,13 +1,27 @@
 {
   "name": "edge-payment-technologies/edge-php-sdk",
+  "description": "PHP client for the Edge payment gateway API.",
+  "type": "library",
+  "license": "MIT",
   "require": {
     "php": "^7.3||^8.0",
     "guzzlehttp/guzzle": "^7.0",
     "league/iso3166": "^4.3"
   },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6"
+  },
   "autoload": {
     "psr-4": {
       "Edge\\": "src/"
     }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Edge\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
   }
 }
